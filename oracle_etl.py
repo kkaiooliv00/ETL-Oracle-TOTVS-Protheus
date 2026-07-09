@@ -429,7 +429,7 @@ def _copy_dataframe_to_staging(
                     formatted: list[str] = []
                     for val in row:
                         if val is None or val is pd.NaT or (isinstance(val, float) and pd.isna(val)):
-                            formatted.append("\\N")
+                            formatted.append(None)
                         else:
                             formatted.append(
                                 str(val)
