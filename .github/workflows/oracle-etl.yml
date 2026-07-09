@@ -47,7 +47,7 @@ concurrency:
 jobs:
   run-etl:
     name: ETL Oracle TOTVS Protheus
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 300
 
     steps:
