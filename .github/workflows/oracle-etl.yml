@@ -77,27 +77,25 @@ jobs:
           $LOOKBACK = "${{ inputs.lookback_days }}"
           $MODE = "${{ inputs.mode }}"
 
-          switch ($MODE) {
-            "custom" {
-              $TABLES = "${{ inputs.tables }}"
-              if ([string]::IsNullOrWhiteSpace($TABLES)) {
-                Write-Error "Erro: modo 'custom' requer o campo tables preenchido."
-                exit 1
-              }
-              Write-Output "Modo: custom — Tabelas: $TABLES"
-              python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES"
+          if ($MODE -eq "custom") {
+            $TABLES = "${{ inputs.tables }}"
+            if ([string]::IsNullOrWhiteSpace($TABLES)) {
+              Write-Error "Erro: modo custom requer tables preenchido."
+              exit 1
             }
-            "exclude" {
-              $EXCLUDE = "${{ inputs.exclude_tables }}"
-              if ([string]::IsNullOrWhiteSpace($EXCLUDE)) {
-                Write-Error "Erro: modo 'exclude' requer o campo exclude_tables preenchido."
-                exit 1
-              }
-              Write-Output "Modo: exclude — Excluindo: $EXCLUDE"
-              python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE"
+            Write-Output "Modo: custom - Tabelas: $TABLES"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES"
+          }
+          elseif ($MODE -eq "exclude") {
+            $EXCLUDE = "${{ inputs.exclude_tables }}"
+            if ([string]::IsNullOrWhiteSpace($EXCLUDE)) {
+              Write-Error "Erro: modo exclude requer exclude_tables preenchido."
+              exit 1
             }
-            default {
-              Write-Output "Modo: todas as tabelas"
-              python oracle_etl.py --lookback-days "$LOOKBACK"
-            }
+            Write-Output "Modo: exclude - Excluindo: $EXCLUDE"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE"
+          }
+          else {
+            Write-Output "Modo: todas as tabelas"
+            python oracle_etl.py --lookback-days "$LOOKBACK"
           }
