@@ -65,7 +65,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
       - name: Executar ETL
-        shell: bash
+        shell: pwsh
         env:
           ORA_HOST: ${{ secrets.ORA_HOST }}
           ORA_PORT: ${{ secrets.ORA_PORT }}
@@ -74,35 +74,30 @@ jobs:
           ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          LOOKBACK="${{ inputs.lookback_days }}"
-          MODE="${{ inputs.mode }}"
+          $LOOKBACK = "${{ inputs.lookback_days }}"
+          $MODE = "${{ inputs.mode }}"
 
-          case "$MODE" in
-            custom)
-              TABLES="${{ inputs.tables }}"
-              if [ -z "$TABLES" ]; then
-                echo "Erro: modo 'custom' requer o campo tables preenchido." >&2
+          switch ($MODE) {
+            "custom" {
+              $TABLES = "${{ inputs.tables }}"
+              if ([string]::IsNullOrWhiteSpace($TABLES)) {
+                Write-Error "Erro: modo 'custom' requer o campo tables preenchido."
                 exit 1
-              fi
-              echo "Modo: custom — Tabelas: $TABLES"
-              python oracle_etl.py \
-                --lookback-days "$LOOKBACK" \
-                --tables "$TABLES"
-              ;;
-            exclude)
-              EXCLUDE="${{ inputs.exclude_tables }}"
-              if [ -z "$EXCLUDE" ]; then
-                echo "Erro: modo 'exclude' requer o campo exclude_tables preenchido." >&2
+              }
+              Write-Output "Modo: custom — Tabelas: $TABLES"
+              python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES"
+            }
+            "exclude" {
+              $EXCLUDE = "${{ inputs.exclude_tables }}"
+              if ([string]::IsNullOrWhiteSpace($EXCLUDE)) {
+                Write-Error "Erro: modo 'exclude' requer o campo exclude_tables preenchido."
                 exit 1
-              fi
-              echo "Modo: exclude — Excluindo: $EXCLUDE"
-              python oracle_etl.py \
-                --lookback-days "$LOOKBACK" \
-                --exclude-tables "$EXCLUDE"
-              ;;
-            all|*)
-              echo "Modo: todas as tabelas"
-              python oracle_etl.py \
-                --lookback-days "$LOOKBACK"
-              ;;
-          esac
+              }
+              Write-Output "Modo: exclude — Excluindo: $EXCLUDE"
+              python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE"
+            }
+            default {
+              Write-Output "Modo: todas as tabelas"
+              python oracle_etl.py --lookback-days "$LOOKBACK"
+            }
+          }
