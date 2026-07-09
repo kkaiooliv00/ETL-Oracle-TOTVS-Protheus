@@ -1,6 +1,8 @@
 name: ETL Oracle TOTVS Protheus
 
 on:
+  schedule:
+    - cron: '0 7 * * *' # 4:00 AM no fuso (UTC-3)
   workflow_dispatch:
     inputs:
       mode:
@@ -75,7 +77,10 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           $LOOKBACK = "${{ inputs.lookback_days }}"
+          if ([string]::IsNullOrWhiteSpace($LOOKBACK)) { $LOOKBACK = "7" }
+
           $MODE = "${{ inputs.mode }}"
+          if ([string]::IsNullOrWhiteSpace($MODE)) { $MODE = "all" }
 
           if ($MODE -eq "custom") {
             $TABLES = "${{ inputs.tables }}"
