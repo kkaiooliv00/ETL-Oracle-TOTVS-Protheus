@@ -65,7 +65,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
       - name: Executar ETL
-        shell: pwsh
+        shell: powershell
         env:
           ORA_HOST: ${{ secrets.ORA_HOST }}
           ORA_PORT: ${{ secrets.ORA_PORT }}
