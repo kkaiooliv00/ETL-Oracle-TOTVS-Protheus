@@ -2,7 +2,7 @@ name: ETL Oracle TOTVS Protheus
 
 on:
   schedule:
-    - cron: '0 7 * * *' # 4:00 AM no fuso (UTC-3)
+    - cron: '30 4 * * *' # 1:30 AM no fuso (UTC-3)
   workflow_dispatch:
     inputs:
       mode:
