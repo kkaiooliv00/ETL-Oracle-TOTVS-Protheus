@@ -107,9 +107,6 @@ jobs:
     query: >
       SELECT COALESCE(TRIM(CQ_FILIAL),' ') || '|' || COALESCE(TRIM(CQ_NUM),' ') || '|' || COALESCE(TRIM(CQ_PRODUTO),' ') || '|' || COALESCE(TRIM(CQ_NUMREQ),' ') || '|' || COALESCE(TO_CHAR(R_E_C_N_O_),' ') AS SUPER_CHAVE,CQ_FILIAL,CQ_NUM,CQ_NUMSC,CQ_PRODUTO,CQ_UM,CQ_QUANT,CQ_SEGUM,CQ_QTSEGUM,CQ_OBS,CQ_CONTA,CQ_DESCRI,CQ_NUMSC,CQ_ITSC,CQ_OK,CQ_NUMREQ,CQ_ITEM,CQ_OP,CQ_CC,CQ_DATPRF,CQ_QTDISP,CQ_STATUSC,CQ_ITEMCTA,CQ_LOCAL,R_E_C_N_O_,D_E_L_E_T_ FROM {schema}.SCQ010 WHERE D_E_L_E_T_ = ' '
 
-  - oracle_table: D03010
-    target_table: D03
-
   - oracle_table: SCP010
     target_table: SCP
     date_column: CP_EMISSAO
@@ -173,12 +170,6 @@ jobs:
     target_table: ST4
     query: >
       SELECT NVL(TRIM(T4_SERVICO), '') AS SUPER_CHAVE, T4_SERVICO, T4_NOME, T4_CODAREA, T4_TIPOMAN FROM {schema}.ST4010 WHERE D_E_L_E_T_ = ' '
-
-  - oracle_table: ZZ1010
-    target_table: ZZ1
-
-  - oracle_table: ZZ2010
-    target_table: ZZ2
 
   - oracle_table: SE1010
     target_table: SE1
