@@ -428,7 +428,7 @@ def _copy_dataframe_to_staging(
                 for row in df.itertuples(index=False, name=None):
                     formatted: list[str] = []
                     for val in row:
-                        if val is None or (isinstance(val, float) and pd.isna(val)):
+                        if val is None or val is pd.NaT or (isinstance(val, float) and pd.isna(val)):
                             formatted.append("\\N")
                         else:
                             formatted.append(
