@@ -433,6 +433,7 @@ def _copy_dataframe_to_staging(
                         else:
                             formatted.append(
                                 str(val)
+                                .replace("\x00", "")
                                 .replace("\\", "\\\\")
                                 .replace("\t", "\\t")
                                 .replace("\n", "\\n")
