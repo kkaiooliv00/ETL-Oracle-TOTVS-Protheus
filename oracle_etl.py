@@ -83,7 +83,7 @@ logger = logging.getLogger("oracle_etl")
 class EtlJob:
     oracle_table: str
     target_table: str
-    query: str | None = None
+    query: str
     date_column: str | None = None
     business_key: str = BUSINESS_KEY
     business_key_columns: tuple[str, ...] = ()
@@ -187,8 +187,13 @@ def load_jobs() -> tuple[str, list[EtlJob]]:
             raise RuntimeError("target_table nao pode ser vazio.")
         if not business_key:
             raise RuntimeError(f"business_key vazio em {target_table}.")
-        if query is not None:
-            query = str(query).strip()
+        if query is None or not str(query).strip():
+            raise RuntimeError(
+                f"Job '{target_table}' nao possui campo 'query' no YAML. "
+                f"Toda tabela DEVE ter uma query personalizada. "
+                f"SELECT * nao e permitido."
+            )
+        query = str(query).strip()
         if date_column is not None:
             date_column = str(date_column).strip()
         business_key_columns = tuple(
@@ -250,40 +255,23 @@ def _build_query(
     job: EtlJob,
     lookback_days: int | None,
 ) -> tuple[str, dict[str, Any]]:
-    """Monta a query SELECT para a tabela Oracle.
+    """Prepara a query customizada para execucao.
 
-    Se o job tiver uma query customizada (campo 'query'), usa-a diretamente,
-    substituindo {schema} pelo oracle_schema.
-    Caso contrario, gera SELECT * com filtro D_E_L_E_T_ <> '*' e
-    filtro de data incremental (se configurado).
+    Substitui o placeholder {schema} pelo oracle_schema real.
+    Toda query DEVE ser definida no YAML — SELECT * nao e permitido.
 
     Retorna (sql_string, bind_params).
     """
     params: dict[str, Any] = {}
 
-    if job.query:
-        # Query customizada — substitui o placeholder {schema}
-        sql = job.query.replace("{schema}", oracle_schema)
-        logger.info("%s | Query customizada: %s", job.target_table, sql)
-        return sql, params
-
-    # Query automatica: SELECT * com filtros
-    table_fqn = f"{oracle_schema}.{job.oracle_table}"
-    conditions = [TOTVS_DELETED_FILTER]
-
-    if job.date_column and lookback_days:
-        start_date = format_start_date(lookback_days)
-        conditions.append(f"{job.date_column} >= :start_date")
-        params["start_date"] = start_date
-        logger.info(
-            "%s | Filtro de data: %s >= '%s' (lookback_days=%s).",
-            job.target_table, job.date_column, start_date, lookback_days,
+    if not job.query:
+        raise RuntimeError(
+            f"Job '{job.target_table}' nao possui query personalizada. "
+            f"SELECT * nao e permitido. Defina o campo 'query' no YAML."
         )
 
-    where_clause = " AND ".join(conditions)
-    sql = f"SELECT * FROM {table_fqn} WHERE {where_clause}"
-
-    logger.debug("%s | Query: %s | Params: %s", job.target_table, sql, params)
+    sql = job.query.replace("{schema}", oracle_schema)
+    logger.info("%s | Query: %s", job.target_table, sql)
     return sql, params
 
 
