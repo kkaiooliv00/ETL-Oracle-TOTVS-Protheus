@@ -374,6 +374,10 @@ def _prepare_dataframe_for_copy(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for col in df.columns:
         if df[col].dtype == object:
+            # Remove NUL bytes (\x00) que o PostgreSQL nao aceita em texto.
+            df[col] = df[col].apply(
+                lambda v: v.replace("\x00", "") if isinstance(v, str) else v
+            )
             sample = df[col].dropna().head(10)
             if any(isinstance(v, (dict, list)) for v in sample):
                 df[col] = df[col].apply(
