@@ -1,0 +1,135 @@
+# Mapeamento de tabelas Oracle TOTVS Protheus -> PostgreSQL.
+#
+# oracle_schema: schema/owner no Oracle onde ficam as tabelas TOTVS.
+# jobs[].oracle_table: nome fisico da tabela no Oracle (com sufixo 010).
+# jobs[].target_table: nome da tabela destino no PostgreSQL (schema totvs).
+# jobs[].query: (opcional) query SQL customizada. Se informada, substitui o
+#               SELECT * automatico. Use {schema} como placeholder para o schema.
+#               Exemplo: "SELECT C1_NUM, C1_EMISSAO FROM {schema}.SC1010 WHERE C1_TIPO = '1'"
+#               Se nao informada, gera automaticamente:
+#               SELECT * FROM {schema}.{oracle_table} WHERE D_E_L_E_T_ <> '*'
+# jobs[].date_column: coluna de data para filtro incremental (YYYYMMDD).
+#                     Se ausente, a carga e sempre total (sem filtro de data).
+#                     So funciona com query automatica (sem campo query).
+# jobs[].business_key: coluna de chave unica para upsert (padrao: super_chave).
+# jobs[].business_key_columns: colunas para gerar chave composta (opcional).
+
+oracle_schema: U_CJ4AP2_PR
+
+jobs:
+  - oracle_table: SC1010
+    target_table: SC1
+    date_column: C1_EMISSAO
+
+  - oracle_table: SC8010
+    target_table: SC8
+
+  - oracle_table: SC7010
+    target_table: SC7
+    date_column: C7_EMISSAO
+
+  - oracle_table: SD1010
+    target_table: SD1
+
+  - oracle_table: SF1010
+    target_table: SF1
+    date_column: F1_EMISSAO
+
+  - oracle_table: SA2010
+    target_table: SA2
+
+  - oracle_table: SE4010
+    target_table: SE4
+
+  - oracle_table: SYS_COMPANY
+    target_table: SYS_COMPANY_FILIAIS
+
+  - oracle_table: SBM010
+    target_table: SBM
+
+  - oracle_table: SCR010
+    target_table: SCR
+
+  - oracle_table: DBM010
+    target_table: DBM
+
+  - oracle_table: CTT010
+    target_table: CTT
+
+  - oracle_table: SYS_USR
+    target_table: SYS_USR
+    business_key: usr_id
+
+  - oracle_table: SED010
+    target_table: SED
+
+  - oracle_table: SB2010
+    target_table: SB2
+
+  - oracle_table: SB1010
+    target_table: SB1
+    business_key: r_e_c_n_o_
+
+  - oracle_table: SCQ010
+    target_table: SCQ
+
+  - oracle_table: D03010
+    target_table: D03
+
+  - oracle_table: SCP010
+    target_table: SCP
+    date_column: CP_EMISSAO
+
+  - oracle_table: SF5010
+    target_table: SF5
+
+  - oracle_table: SF4010
+    target_table: SF4
+
+  - oracle_table: STL010
+    target_table: STL
+
+  - oracle_table: SE2010
+    target_table: SE2
+    date_column: E2_EMISSAO
+
+  - oracle_table: STJ010
+    target_table: STJ
+    date_column: TJ_DTORIGI
+
+  - oracle_table: NNR010
+    target_table: NNR
+
+  - oracle_table: STF010
+    target_table: STF
+    date_column: TF_DTULTMA
+
+  - oracle_table: STI010
+    target_table: STI
+
+  - oracle_table: ST9010
+    target_table: ST9
+
+  - oracle_table: ST6010
+    target_table: ST6
+
+  - oracle_table: ST4010
+    target_table: ST4
+
+  - oracle_table: ZZ1010
+    target_table: ZZ1
+
+  - oracle_table: ZZ2010
+    target_table: ZZ2
+
+  - oracle_table: SE1010
+    target_table: SE1
+    date_column: E1_EMISSAO
+
+  - oracle_table: SE5010
+    target_table: SE5
+    date_column: E5_DATA
+
+  - oracle_table: ZZ1010
+    target_table: zz1e2
+    date_column: ZZ1_DATA

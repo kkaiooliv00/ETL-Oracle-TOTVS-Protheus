@@ -1,0 +1,107 @@
+name: ETL Oracle TOTVS Protheus
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >
+          Modo de execucao:
+          all = todas as tabelas
+          custom = apenas as tabelas informadas em 'tables'
+          exclude = todas exceto as informadas em 'exclude_tables'
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - all
+          - custom
+          - exclude
+      tables:
+        description: >
+          Tabelas para o modo "custom" — separadas por virgula (ex: SC1,SC7,SE1).
+          Ignorado nos outros modos.
+        required: false
+        type: string
+        default: ""
+      exclude_tables:
+        description: >
+          Tabelas para o modo "exclude" — separadas por virgula.
+          Ignorado nos outros modos.
+        required: false
+        type: string
+        default: ""
+      lookback_days:
+        description: >
+          Dias de historico a sincronizar. Use 0 para carga total sem filtro de data.
+        required: true
+        type: string
+        default: "7"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: etl-oracle-totvs
+  cancel-in-progress: false
+
+jobs:
+  run-etl:
+    name: ETL Oracle TOTVS Protheus
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python com cache de dependencias
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.9"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Executar ETL
+        env:
+          ORA_HOST: ${{ secrets.ORA_HOST }}
+          ORA_PORT: ${{ secrets.ORA_PORT }}
+          ORA_SERVICE: ${{ secrets.ORA_SERVICE }}
+          ORA_USER: ${{ secrets.ORA_USER }}
+          ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          LOOKBACK="${{ inputs.lookback_days }}"
+          MODE="${{ inputs.mode }}"
+
+          case "$MODE" in
+            custom)
+              TABLES="${{ inputs.tables }}"
+              if [ -z "$TABLES" ]; then
+                echo "Erro: modo 'custom' requer o campo tables preenchido." >&2
+                exit 1
+              fi
+              echo "Modo: custom — Tabelas: $TABLES"
+              python oracle_etl.py \
+                --lookback-days "$LOOKBACK" \
+                --tables "$TABLES"
+              ;;
+            exclude)
+              EXCLUDE="${{ inputs.exclude_tables }}"
+              if [ -z "$EXCLUDE" ]; then
+                echo "Erro: modo 'exclude' requer o campo exclude_tables preenchido." >&2
+                exit 1
+              fi
+              echo "Modo: exclude — Excluindo: $EXCLUDE"
+              python oracle_etl.py \
+                --lookback-days "$LOOKBACK" \
+                --exclude-tables "$EXCLUDE"
+              ;;
+            all|*)
+              echo "Modo: todas as tabelas"
+              python oracle_etl.py \
+                --lookback-days "$LOOKBACK"
+              ;;
+          esac
