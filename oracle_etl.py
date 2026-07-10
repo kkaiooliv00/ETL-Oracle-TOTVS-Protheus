@@ -342,6 +342,14 @@ def transform_records(job: EtlJob, records: list[dict[str, Any]]) -> pd.DataFram
     if df.empty:
         return df
 
+    # Limpeza de campos textuais/código vindos do Protheus (remove CHR(160) e trailing spaces)
+    # Isso evita problemas com campos fixos preenchidos com espaço, garantindo a integridade dos joins e filtros.
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].apply(
+                lambda v: v.replace("\xa0", " ").strip() if isinstance(v, str) else v
+            )
+
     if job.business_key not in df.columns and job.business_key_columns:
         missing = [c for c in job.business_key_columns if c not in df.columns]
         if missing:
@@ -795,10 +803,11 @@ def run_job(
     finalize_load(engine, job, columns)
 
     elapsed = time.perf_counter() - started_at
+    records_per_sec = extracted_records / elapsed if elapsed > 0 else 0
     logger.info(
-        "%s | Carga concluida em %s.%s | extraidos=%s staging=%s tempo=%.1fs.",
+        "%s | Carga concluida em %s.%s | extraidos=%s staging=%s tempo=%.1fs velocidade=%.0f reg/s.",
         job.target_table, TARGET_SCHEMA, job.target_table,
-        extracted_records, staged_records, elapsed,
+        extracted_records, staged_records, elapsed, records_per_sec
     )
 
 
