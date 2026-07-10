@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 import oracledb
 import pandas as pd
+from pandas.api.types import is_string_dtype, is_object_dtype
 import psycopg
 import yaml
 from dotenv import load_dotenv
@@ -345,7 +346,7 @@ def transform_records(job: EtlJob, records: list[dict[str, Any]]) -> pd.DataFram
     # Limpeza de campos textuais/código vindos do Protheus (remove CHR(160) e trailing spaces)
     # Isso evita problemas com campos fixos preenchidos com espaço, garantindo a integridade dos joins e filtros.
     for col in df.columns:
-        if df[col].dtype == object:
+        if is_object_dtype(df[col]) or is_string_dtype(df[col]):
             df[col] = df[col].apply(
                 lambda v: v.replace("\xa0", " ").strip() if isinstance(v, str) else v
             )
@@ -381,7 +382,7 @@ def transform_records(job: EtlJob, records: list[dict[str, Any]]) -> pd.DataFram
 def _prepare_dataframe_for_copy(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     for col in df.columns:
-        if df[col].dtype == object:
+        if is_object_dtype(df[col]) or is_string_dtype(df[col]):
             # Remove NUL bytes (\x00) que o PostgreSQL nao aceita em texto.
             df[col] = df[col].apply(
                 lambda v: v.replace("\x00", "") if isinstance(v, str) else v
