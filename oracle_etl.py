@@ -34,6 +34,7 @@ from pandas.api.types import is_string_dtype, is_object_dtype
 import psycopg
 import yaml
 from dotenv import load_dotenv
+from openpyxl import Workbook
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -69,6 +70,9 @@ TOTVS_DELETED_FILTER = "D_E_L_E_T_ <> '*'"
 
 # Tentativas de retry por job.
 JOB_MAX_ATTEMPTS = 3
+
+# Limite de linhas por aba imposto pelo formato XLSX.
+EXCEL_MAX_ROWS_PER_SHEET = 1_048_576
 # ─────────────────────────────────────────────────────────────────────────────
 
 logging.basicConfig(
@@ -812,6 +816,114 @@ def run_job(
     )
 
 
+# ── Exportacao XLSX ────────────────────────────────────────────────────────
+
+def _excel_safe_sheet_name(name: str, used_names: set[str], part: int) -> str:
+    """Gera um nome de aba compativel com o Excel e sem duplicidade."""
+    base = "".join("_" if char in "[]:*?/\\\\" else char for char in name).strip()
+    base = base or "dados"
+    suffix = "" if part == 1 else f"_{part}"
+    candidate = f"{base[:31 - len(suffix)]}{suffix}"
+    while candidate.lower() in used_names:
+        part += 1
+        suffix = f"_{part}"
+        candidate = f"{base[:31 - len(suffix)]}{suffix}"
+    used_names.add(candidate.lower())
+    return candidate
+
+
+def _excel_value(value: Any) -> Any:
+    """Converte valores do Oracle/Pandas para tipos aceitos pelo XLSX."""
+    if value is None or value is pd.NaT:
+        return None
+    if isinstance(value, float) and pd.isna(value):
+        return None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime().replace(tzinfo=None)
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    return value
+
+
+def export_jobs_to_excel(
+    ora_conn: oracledb.Connection,
+    oracle_schema: str,
+    jobs: list[EtlJob],
+    lookback_days: int | None,
+    output_file: Path,
+) -> None:
+    """Extrai os jobs selecionados para um unico XLSX, sem usar PostgreSQL."""
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook(write_only=True)
+    used_sheet_names: set[str] = set()
+    total_records = 0
+
+    try:
+        for job in jobs:
+            sheet_part = 1
+            worksheet = None
+            columns: list[str] | None = None
+            rows_in_sheet = 0
+            job_records = 0
+
+            for _, records in iter_oracle_batches(ora_conn, oracle_schema, job, lookback_days):
+                if not records:
+                    continue
+                df = transform_records(job, records)
+                if df.empty:
+                    continue
+
+                if columns is None:
+                    columns = [str(column) for column in df.columns]
+                extra_columns = [column for column in df.columns if column not in columns]
+                if extra_columns:
+                    raise RuntimeError(
+                        f"{job.target_table} retornou colunas diferentes entre batches: "
+                        f"{', '.join(str(column) for column in extra_columns)}"
+                    )
+
+                df = df.reindex(columns=columns)
+                for row in df.itertuples(index=False, name=None):
+                    if worksheet is None or rows_in_sheet >= EXCEL_MAX_ROWS_PER_SHEET:
+                        sheet_name = _excel_safe_sheet_name(
+                            job.target_table, used_sheet_names, sheet_part
+                        )
+                        sheet_part += 1
+                        worksheet = workbook.create_sheet(sheet_name)
+                        worksheet.append(columns)
+                        rows_in_sheet = 1
+                    worksheet.append([_excel_value(value) for value in row])
+                    rows_in_sheet += 1
+                    job_records += 1
+                    total_records += 1
+
+            if columns is None:
+                worksheet = workbook.create_sheet(
+                    _excel_safe_sheet_name(job.target_table, used_sheet_names, sheet_part)
+                )
+                worksheet.append(["mensagem"])
+                worksheet.append(["Nenhum registro retornado pela consulta."])
+
+            logger.info(
+                "%s | Exportacao XLSX concluida: %s registros.",
+                job.target_table, job_records,
+            )
+
+        workbook.save(output_file)
+    except Exception:
+        workbook.close()
+        raise
+
+    logger.info(
+        "Arquivo XLSX gerado com sucesso: %s | %s registros em %s jobs.",
+        output_file, total_records, len(jobs),
+    )
+
+
 # ── CLI e entrypoint ──────────────────────────────────────────────────────────
 
 def filter_jobs_by_tables(
@@ -877,6 +989,14 @@ def parse_args() -> argparse.Namespace:
         "--exclude-tables",
         default="",
         help="Lista separada por virgulas de tabelas a ignorar.",
+    )
+    parser.add_argument(
+        "--export-xlsx",
+        default="",
+        help=(
+            "Caminho do arquivo XLSX a gerar. Quando informado, extrai do Oracle "
+            "sem conectar ou gravar no PostgreSQL."
+        ),
     )
     return parser.parse_args()
 
@@ -966,9 +1086,23 @@ def main() -> None:
         logger.info("Nenhum job selecionado; nada a executar.")
         return
 
-    # Valida conexoes antes de comecar
+    # A exportacao XLSX depende apenas do Oracle; o Supabase nao e consultado.
     preflight_oracle_connection()
+    if args.export_xlsx:
+        ora_conn = create_oracle_connection()
+        try:
+            export_jobs_to_excel(
+                ora_conn,
+                oracle_schema,
+                jobs,
+                lookback_days,
+                Path(args.export_xlsx),
+            )
+        finally:
+            ora_conn.close()
+        return
 
+    # Valida a conexao do destino antes de iniciar a carga no Supabase.
     _preflight_engine = create_engine(
         _sqlalchemy_database_url(require_postgres_database_url()),
         poolclass=QueuePool,

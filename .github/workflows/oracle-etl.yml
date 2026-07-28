@@ -18,6 +18,14 @@ on:
           - all
           - custom
           - exclude
+      destination:
+        description: "Destino da execucao: Supabase ou arquivo Excel (XLSX)."
+        required: true
+        type: choice
+        default: "supabase"
+        options:
+          - supabase
+          - excel
       tables:
         description: >
           Tabelas para o modo "custom" — separadas por virgula (ex: SC1,SC7,SE1).
@@ -74,13 +82,26 @@ jobs:
           ORA_SERVICE: ${{ secrets.ORA_SERVICE }}
           ORA_USER: ${{ secrets.ORA_USER }}
           ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           $LOOKBACK = "${{ inputs.lookback_days }}"
           if ([string]::IsNullOrWhiteSpace($LOOKBACK)) { $LOOKBACK = "30" }
 
           $MODE = "${{ inputs.mode }}"
           if ([string]::IsNullOrWhiteSpace($MODE)) { $MODE = "all" }
+
+          $DESTINATION = "${{ inputs.destination }}"
+          if ([string]::IsNullOrWhiteSpace($DESTINATION)) { $DESTINATION = "supabase" }
+
+          $EXPORT_ARG = @()
+          if ($DESTINATION -eq "excel") {
+            New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+            $EXPORT_ARG = @("--export-xlsx", "artifacts/oracle_export.xlsx")
+            Write-Output "Destino: arquivo Excel (sem conexao com o Supabase)"
+          }
+          else {
+            $env:DATABASE_URL = "${{ secrets.DATABASE_URL }}"
+            Write-Output "Destino: Supabase"
+          }
 
           if ($MODE -eq "custom") {
             $TABLES = "${{ inputs.tables }}"
@@ -89,7 +110,7 @@ jobs:
               exit 1
             }
             Write-Output "Modo: custom - Tabelas: $TABLES"
-            python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES" @EXPORT_ARG
           }
           elseif ($MODE -eq "exclude") {
             $EXCLUDE = "${{ inputs.exclude_tables }}"
@@ -98,9 +119,18 @@ jobs:
               exit 1
             }
             Write-Output "Modo: exclude - Excluindo: $EXCLUDE"
-            python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE" @EXPORT_ARG
           }
           else {
             Write-Output "Modo: todas as tabelas"
-            python oracle_etl.py --lookback-days "$LOOKBACK"
+            python oracle_etl.py --lookback-days "$LOOKBACK" @EXPORT_ARG
           }
+
+      - name: Disponibilizar arquivo Excel para download
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.destination == 'excel' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportacao-oracle-xlsx
+          path: artifacts/oracle_export.xlsx
+          if-no-files-found: error
+          retention-days: 7
