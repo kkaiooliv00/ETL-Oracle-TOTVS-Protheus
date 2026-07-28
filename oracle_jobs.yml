@@ -132,7 +132,79 @@ jobs:
     target_table: SE2
     date_column: E2_EMISSAO
     query: >
-      SELECT COALESCE(TRIM(SE2.E2_FILIAL),' ') || '|' || COALESCE(TRIM(SE2.E2_PREFIXO),' ') || '|' || COALESCE(TRIM(SE2.E2_NUM),' ') || '|' || COALESCE(TRIM(SE2.E2_PARCELA),' ') || '|' || COALESCE(TRIM(SE2.E2_TIPO),' ') || '|' || COALESCE(TRIM(SE2.E2_FORNECE),' ') || '|' || COALESCE(TRIM(SE2.E2_LOJA),' ') || '|' || COALESCE(TRIM(SE2.E2_NATUREZ),' ') || '|' || COALESCE(TRIM(SE2.E2_CCUSTO),' ') || '|' || COALESCE(TRIM(SE2.E2_EMISSAO),' ') || '|' || COALESCE(TRIM(SE2.E2_VENCTO),' ') AS SUPER_CHAVE,E2_FILIAL,E2_CCUSTO,E2_PREFIXO,E2_NUM,E2_PARCELA,E2_TIPO,E2_NATUREZ,E2_NOMFOR,E2_EMISSAO,E2_VENCTO,E2_HIST,E2_VENCREA,E2_VALOR,E2_ISS,E2_IRRF,E2_EMIS1,E2_SALDO,E2_VALLIQ,E2_RATEIO,E2_ORIGEM,E2_TEMDOCS,E2_FORNECE,E2_LOJA,E2_CONTAD,E2_BAIXA,E2_USUALIB,E2_USERLGI FROM {schema}.SE2010 SE2 WHERE SE2.D_E_L_E_T_ = ' ' AND E2_NATUREZ NOT IN ('2010101', '8888888', '9999999') AND E2_EMISSAO >= '20250501'
+      SELECT
+          COALESCE(TRIM(SE2.E2_FILIAL), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_PREFIXO), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_NUM), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_PARCELA), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_TIPO), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_FORNECE), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_LOJA), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_NATUREZ), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_CCUSTO), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_EMISSAO), ' ') || '|' ||
+          COALESCE(TRIM(SE2.E2_VENCTO), ' ') AS SUPER_CHAVE,
+          SE2.E2_FILIAL,
+          SE2.E2_CCUSTO,
+          SE2.E2_PREFIXO,
+          SE2.E2_NUM,
+          SE2.E2_PARCELA,
+          SE2.E2_TIPO,
+          SE2.E2_NATUREZ,
+          SE2.E2_NOMFOR,
+          SE2.E2_EMISSAO,
+          SE2.E2_VENCTO,
+          SE2.E2_HIST,
+          SE2.E2_VENCREA,
+          SE2.E2_VALOR,
+          SE2.E2_ISS,
+          SE2.E2_IRRF,
+          SE2.E2_EMIS1,
+          SE2.E2_SALDO,
+          SE2.E2_VALLIQ,
+          SE2.E2_RATEIO,
+          SE2.E2_ORIGEM,
+          SE2.E2_TEMDOCS,
+          SE2.E2_FORNECE,
+          SE2.E2_LOJA,
+          SE2.E2_CONTAD,
+          SE2.E2_BAIXA,
+          SE2.E2_USUALIB,
+          SE2.E2_USERLGI,
+          REGEXP_REPLACE(
+              TRIM(
+                  SUBSTR(SE2.E2_USERLGI, 3, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 7, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 11, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 15, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 2, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 6, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 10, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 14, 1)
+              ),
+              '[^0-9]',
+              ''
+          ) AS CODIGO_USUARIO,
+          USR.USR_NOME
+      FROM {schema}.SE2010 SE2
+      LEFT JOIN {schema}.SYS_USR USR ON
+          USR.USR_ID = REGEXP_REPLACE(
+              TRIM(
+                  SUBSTR(SE2.E2_USERLGI, 3, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 7, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 11, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 15, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 2, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 6, 1)  ||
+                  SUBSTR(SE2.E2_USERLGI, 10, 1) ||
+                  SUBSTR(SE2.E2_USERLGI, 14, 1)
+              ),
+              '[^0-9]',
+              ''
+          )
+      WHERE SE2.D_E_L_E_T_ = ' '
+        AND SE2.E2_NATUREZ NOT IN ('2010101', '8888888', '9999999')
+        AND SE2.E2_EMISSAO >= '20250501'
 
   - oracle_table: STJ010
     target_table: STJ
