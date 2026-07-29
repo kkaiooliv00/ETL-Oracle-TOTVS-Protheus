@@ -63,6 +63,15 @@ def destination_database_url() -> str:
     return os.getenv(GW_DATABASE_URL_ENV) or require_env(DATABASE_URL_ENV)
 
 
+def sqlalchemy_database_url(database_url: str) -> str:
+    """Forca o driver psycopg v3, que e a dependencia usada pelo projeto."""
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 def quote(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
@@ -204,7 +213,13 @@ def finalize_load(engine: Engine, schema: str, target: str, key: str, columns: l
 def run_job(source_url: str, destination_url: str, job: dict[str, str]) -> None:
     schema, target, key, query = (job["target_schema"], job["target_table"], job["business_key"], job["query"])
     staging = f"{target}_staging"
-    destination_engine = create_engine(destination_url, poolclass=QueuePool, pool_size=2, max_overflow=0, pool_pre_ping=True)
+    destination_engine = create_engine(
+        sqlalchemy_database_url(destination_url),
+        poolclass=QueuePool,
+        pool_size=2,
+        max_overflow=0,
+        pool_pre_ping=True,
+    )
     rows = 0
     first_batch = True
     columns: list[str] | None = None
