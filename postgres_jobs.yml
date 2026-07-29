@@ -1,0 +1,6 @@
+# Cargas PostgreSQL de origem -> Supabase.
+jobs:
+  - target_schema: gw
+    target_table: sales
+    business_key: super_chave
+    query_file: postgres_sales_query.sql

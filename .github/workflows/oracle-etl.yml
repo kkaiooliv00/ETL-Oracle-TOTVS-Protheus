@@ -26,6 +26,7 @@ on:
         options:
           - supabase
           - excel
+          - postgres-to-supabase
       tables:
         description: >
           Tabelas para o modo "custom" — separadas por virgula (ex: SC1,SC7,SE1).
@@ -82,6 +83,13 @@ jobs:
           ORA_SERVICE: ${{ secrets.ORA_SERVICE }}
           ORA_USER: ${{ secrets.ORA_USER }}
           ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
+          GW_SOURCE_HOST: ${{ secrets.GW_SOURCE_HOST }}
+          GW_SOURCE_PORT: ${{ secrets.GW_SOURCE_PORT }}
+          GW_SOURCE_DATABASE: ${{ secrets.GW_SOURCE_DATABASE }}
+          GW_SOURCE_USER: ${{ secrets.GW_SOURCE_USER }}
+          GW_SOURCE_PASSWORD: ${{ secrets.GW_SOURCE_PASSWORD }}
+          GW_SOURCE_SSLMODE: ${{ secrets.GW_SOURCE_SSLMODE }}
+          GW_DATABASE_URL: ${{ secrets.GW_DATABASE_URL }}
         run: |
           $LOOKBACK = "${{ inputs.lookback_days }}"
           if ([string]::IsNullOrWhiteSpace($LOOKBACK)) { $LOOKBACK = "30" }
@@ -101,6 +109,20 @@ jobs:
           else {
             $env:DATABASE_URL = "${{ secrets.DATABASE_URL }}"
             Write-Output "Destino: Supabase"
+          }
+
+          if ($DESTINATION -eq "postgres-to-supabase") {
+            if ([string]::IsNullOrWhiteSpace($env:GW_SOURCE_HOST) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_PORT) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_DATABASE) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_USER) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_PASSWORD)) {
+              Write-Error "Erro: configure todas as secrets GW_SOURCE_*."
+              exit 1
+            }
+            Write-Output "Origem: PostgreSQL | Destino: Supabase (schema gw)"
+            python postgres_to_supabase.py
+            exit $LASTEXITCODE
           }
 
           if ($MODE -eq "custom") {

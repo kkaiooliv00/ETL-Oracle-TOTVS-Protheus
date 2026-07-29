@@ -87,6 +87,22 @@ python oracle_etl.py --tables "SC1,SC7" --export-xlsx "artifacts/oracle_export.x
 
 O envio por e-mail tambem e possivel, mas requer uma configuracao adicional de provedor (por exemplo, Microsoft 365/Graph ou SMTP) e credenciais armazenadas como secrets do GitHub. Para arquivos grandes, e preferivel enviar um link de download em vez de anexar o XLSX.
 
+### PostgreSQL de origem para Supabase (`gw.sales`)
+
+O workflow tambem possui o destino `postgres-to-supabase`. Ele executa a consulta em `postgres_sales_query.sql` no banco de leitura e faz *upsert* em `gw.sales` usando `super_chave`.
+
+Cadastre estas secrets no GitHub, todas com prefixo `GW_`:
+
+- `GW_SOURCE_HOST`: `rds-los-12-leitura-bi-revolux.cbqxjhiaugyj.us-east-2.rds.amazonaws.com`
+- `GW_SOURCE_PORT`: `5432`
+- `GW_SOURCE_DATABASE`: `postgres`
+- `GW_SOURCE_USER`: `bi_machine`
+- `GW_SOURCE_PASSWORD`: senha do banco de leitura
+- `GW_SOURCE_SSLMODE`: opcional; use `require` (tambem e o padrao)
+- `GW_DATABASE_URL`: opcional; URL de conexão do Supabase exclusiva para esta carga. Se não for cadastrada, a carga reutiliza a secret `DATABASE_URL` já existente.
+
+As secrets Oracle não são usadas no modo `postgres-to-supabase`. A `DATABASE_URL` existente é reutilizada como destino do Supabase quando `GW_DATABASE_URL` não for cadastrada. A query atual filtra emissões a partir de `2026-05-01`; esse marco pode ser alterado em `postgres_sales_query.sql`.
+
 ### Outros Scripts
 - `verify_tables.py`: É um script utilitário simples que lê o `oracle_jobs.yml` e checa se as tabelas contidas lá estão listadas no arquivo `tables.txt`. Ele informa se falta alguma tabela no ambiente Oracle (baseado nesse log/arquivo TXT externo).
 
