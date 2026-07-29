@@ -3,12 +3,10 @@ oracle_schema: U_CJ4AP2_PR
 jobs:
   - oracle_table: SE1010
     target_table: INAD
-    business_key: a1_cgc
     query: >
       SELECT A1.A1_CGC, SUM(E1.E1_SALDO) AS INADIMPLENCIA FROM {schema}.SE1010 E1 JOIN {schema}.SA1010 A1 ON A1.A1_COD = E1.E1_CLIENTE AND E1.E1_LOJA = A1.A1_LOJA WHERE E1.E1_NUMBOR <> ' ' AND TRUNC(CURRENT_DATE) > TO_DATE(E1.E1_VENCTO, 'YYYYMMDD') AND E1.D_E_L_E_T_ = ' ' GROUP BY A1.A1_CGC
 
   - oracle_table: SE1010
     target_table: LMC
-    business_key: a1_cgc
     query: >
       SELECT A1.A1_CGC, SUM(E1.E1_SALDO) AS VALOR FROM {schema}.SE1010 E1 JOIN {schema}.SA1010 A1 ON A1.A1_COD = E1.E1_CLIENTE AND E1.E1_LOJA = A1.A1_LOJA WHERE E1.E1_SALDO <> 0 AND E1.D_E_L_E_T_ = ' ' GROUP BY A1.A1_CGC
