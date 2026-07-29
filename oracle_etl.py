@@ -1,19 +1,3 @@
-"""ETL Oracle TOTVS Protheus -> PostgreSQL.
-
-Extrai dados diretamente do banco Oracle do TOTVS Protheus (somente leitura)
-e carrega no PostgreSQL (Supabase) via staging + upsert.
-
-Decisoes de arquitetura:
-- Extracao: SELECT direto no Oracle com cursor.fetchmany() em batches de
-  FETCH_SIZE registros. Sem paginacao HTTP, sem rate limiting, sem encoding
-  workaround — o driver oracledb gerencia tudo.
-- Filtro de exclusao logica: WHERE D_E_L_E_T_ <> '*' em todas as queries.
-  No TOTVS, registros deletados sao marcados com D_E_L_E_T_ = '*'.
-- Escrita no staging: COPY via psycopg3 — identico ao ETL via API.
-- Upsert final: uma unica instrucao SQL INSERT ... ON CONFLICT.
-- Pool de conexoes PostgreSQL reutilizado (QueuePool).
-"""
-
 from __future__ import annotations
 
 import argparse

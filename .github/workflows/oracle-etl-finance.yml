@@ -1,0 +1,160 @@
+name: ETL Oracle Finance
+
+on:
+  schedule:
+    - cron: '30 8 * * *' # 5:30 AM BRT (UTC-3)
+    - cron: '0 15 * * *' # 12:00 PM BRT (UTC-3)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >
+          Modo de execucao:
+          all = todas as tabelas
+          custom = apenas as tabelas informadas em 'tables'
+          exclude = todas exceto as informadas em 'exclude_tables'
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - all
+          - custom
+          - exclude
+      destination:
+        description: "Destino da execucao: Supabase ou arquivo Excel (XLSX)."
+        required: true
+        type: choice
+        default: "supabase"
+        options:
+          - supabase
+          - excel
+          - postgres-to-supabase
+      tables:
+        description: >
+          Tabelas para o modo "custom" — separadas por virgula (ex: INAD,LMC).
+          Ignorado nos outros modos.
+        required: false
+        type: string
+        default: ""
+      exclude_tables:
+        description: >
+          Tabelas para o modo "exclude" — separadas por virgula.
+          Ignorado nos outros modos.
+        required: false
+        type: string
+        default: ""
+      lookback_days:
+        description: >
+          Dias de historico a sincronizar. Use 0 para carga total sem filtro de data.
+        required: true
+        type: string
+        default: "30"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: etl-oracle-finance
+  cancel-in-progress: false
+
+jobs:
+  run-etl:
+    name: ETL Oracle Finance
+    runs-on: self-hosted
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python com cache de dependencias
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.9"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Executar ETL
+        shell: powershell
+        env:
+          ETL_JOBS_FILE: oracle_jobs_finance.yml
+          ORA_HOST: ${{ secrets.ORA_HOST }}
+          ORA_PORT: ${{ secrets.ORA_PORT }}
+          ORA_SERVICE: ${{ secrets.ORA_SERVICE }}
+          ORA_USER: ${{ secrets.ORA_USER }}
+          ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
+          GW_SOURCE_HOST: ${{ secrets.GW_SOURCE_HOST }}
+          GW_SOURCE_PORT: ${{ secrets.GW_SOURCE_PORT }}
+          GW_SOURCE_DATABASE: ${{ secrets.GW_SOURCE_DATABASE }}
+          GW_SOURCE_USER: ${{ secrets.GW_SOURCE_USER }}
+          GW_SOURCE_PASSWORD: ${{ secrets.GW_SOURCE_PASSWORD }}
+          GW_SOURCE_SSLMODE: ${{ secrets.GW_SOURCE_SSLMODE }}
+          GW_DATABASE_URL: ${{ secrets.GW_DATABASE_URL }}
+        run: |
+          $LOOKBACK = "${{ inputs.lookback_days }}"
+          if ([string]::IsNullOrWhiteSpace($LOOKBACK)) { $LOOKBACK = "30" }
+
+          $MODE = "${{ inputs.mode }}"
+          if ([string]::IsNullOrWhiteSpace($MODE)) { $MODE = "all" }
+
+          $DESTINATION = "${{ inputs.destination }}"
+          if ([string]::IsNullOrWhiteSpace($DESTINATION)) { $DESTINATION = "supabase" }
+
+          $EXPORT_ARG = @()
+          if ($DESTINATION -eq "excel") {
+            New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+            $EXPORT_ARG = @("--export-xlsx", "artifacts/oracle_export.xlsx")
+            Write-Output "Destino: arquivo Excel (sem conexao com o Supabase)"
+          }
+          else {
+            $env:DATABASE_URL = "${{ secrets.DATABASE_URL }}"
+            Write-Output "Destino: Supabase"
+          }
+
+          if ($DESTINATION -eq "postgres-to-supabase") {
+            if ([string]::IsNullOrWhiteSpace($env:GW_SOURCE_HOST) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_PORT) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_DATABASE) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_USER) -or
+                [string]::IsNullOrWhiteSpace($env:GW_SOURCE_PASSWORD)) {
+              Write-Error "Erro: configure todas as secrets GW_SOURCE_*."
+              exit 1
+            }
+            Write-Output "Origem: PostgreSQL | Destino: Supabase (schema gw)"
+            python postgres_to_supabase.py
+            exit $LASTEXITCODE
+          }
+
+          if ($MODE -eq "custom") {
+            $TABLES = "${{ inputs.tables }}"
+            if ([string]::IsNullOrWhiteSpace($TABLES)) {
+              Write-Error "Erro: modo custom requer tables preenchido."
+              exit 1
+            }
+            Write-Output "Modo: custom - Tabelas: $TABLES"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --tables "$TABLES" @EXPORT_ARG
+          }
+          elseif ($MODE -eq "exclude") {
+            $EXCLUDE = "${{ inputs.exclude_tables }}"
+            if ([string]::IsNullOrWhiteSpace($EXCLUDE)) {
+              Write-Error "Erro: modo exclude requer exclude_tables preenchido."
+              exit 1
+            }
+            Write-Output "Modo: exclude - Excluindo: $EXCLUDE"
+            python oracle_etl.py --lookback-days "$LOOKBACK" --exclude-tables "$EXCLUDE" @EXPORT_ARG
+          }
+          else {
+            Write-Output "Modo: todas as tabelas"
+            python oracle_etl.py --lookback-days "$LOOKBACK" @EXPORT_ARG
+          }
+
+      - name: Disponibilizar arquivo Excel para download
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.destination == 'excel' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportacao-oracle-finance-xlsx
+          path: artifacts/oracle_export.xlsx
+          if-no-files-found: error
+          retention-days: 7
