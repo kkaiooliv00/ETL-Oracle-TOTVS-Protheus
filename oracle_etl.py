@@ -666,47 +666,86 @@ def _staging_has_business_key(connection: Connection, job: EtlJob) -> bool:
     return job.business_key in staging_columns
 
 
-def finalize_load(engine: Engine, job: EtlJob, columns: list[str]) -> None:
+def delete_from_staging(connection: Connection, job: EtlJob) -> None:
+    key = quote_identifier(job.business_key)
+    staging = qualified_table(TARGET_SCHEMA, job.staging_table)
+    target = qualified_table(TARGET_SCHEMA, job.target_table)
+    
+    table_exists = connection.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class t
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE t.relname = :tn AND n.nspname = :sn
+            )
+            """
+        ),
+        {"tn": job.target_table, "sn": TARGET_SCHEMA},
+    ).scalar_one()
+
+    if not table_exists:
+        logger.info("%s | Tabela alvo nao existe no destino. Nada a excluir.", job.target_table)
+        return
+        
+    result = connection.execute(
+        text(
+            f"DELETE FROM {target} WHERE {key} IN (SELECT {key} FROM {staging})"
+        )
+    )
+    logger.info(
+        "%s | DELETE concluido: %s linhas excluidas fisicamente do Supabase.",
+        job.target_table, result.rowcount,
+    )
+
+
+def finalize_load(engine: Engine, job: EtlJob, columns: list[str], is_delete_mode: bool = False) -> None:
     logger.info("%s | Iniciando finalize_load.", job.target_table)
     try:
         with engine.begin() as conn:
-            t0 = time.perf_counter()
-            create_target_from_staging(conn, job)
-            logger.info("%s | create_target_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
-
-            t0 = time.perf_counter()
-            add_missing_target_columns(conn, engine, job)
-            logger.info("%s | add_missing_target_columns: %.1fs.", job.target_table, time.perf_counter() - t0)
-
-            has_key = _staging_has_business_key(conn, job)
-
-            if not has_key:
-                # Tabela sem super_chave: realiza INSERT total (TRUNCATE + INSERT)
-                logger.info(
-                    "%s | super_chave '%s' ausente na tabela de staging. "
-                    "Executando INSERT total (TRUNCATE + INSERT).",
-                    job.target_table, job.business_key,
-                )
+            if is_delete_mode:
                 t0 = time.perf_counter()
-                insert_all_from_staging(conn, job, columns)
-                logger.info("%s | insert_all_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
+                delete_from_staging(conn, job)
+                logger.info("%s | delete_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
             else:
-                # Tabela com super_chave: fluxo normal de upsert
                 t0 = time.perf_counter()
-                deduplicate_target_table(conn, job)
-                logger.info("%s | deduplicate_target_table: %.1fs.", job.target_table, time.perf_counter() - t0)
+                create_target_from_staging(conn, job)
+                logger.info("%s | create_target_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
 
                 t0 = time.perf_counter()
-                ensure_unique_constraint(conn, job)
-                logger.info("%s | ensure_unique_constraint: %.1fs.", job.target_table, time.perf_counter() - t0)
+                add_missing_target_columns(conn, engine, job)
+                logger.info("%s | add_missing_target_columns: %.1fs.", job.target_table, time.perf_counter() - t0)
 
-                t0 = time.perf_counter()
-                create_dedup_staging(conn, job, columns)
-                logger.info("%s | create_dedup_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
+                has_key = _staging_has_business_key(conn, job)
 
-                t0 = time.perf_counter()
-                upsert_from_staging(conn, job, columns)
-                logger.info("%s | upsert_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
+                if not has_key:
+                    # Tabela sem super_chave: realiza INSERT total (TRUNCATE + INSERT)
+                    logger.info(
+                        "%s | super_chave '%s' ausente na tabela de staging. "
+                        "Executando INSERT total (TRUNCATE + INSERT).",
+                        job.target_table, job.business_key,
+                    )
+                    t0 = time.perf_counter()
+                    insert_all_from_staging(conn, job, columns)
+                    logger.info("%s | insert_all_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
+                else:
+                    # Tabela com super_chave: fluxo normal de upsert
+                    t0 = time.perf_counter()
+                    deduplicate_target_table(conn, job)
+                    logger.info("%s | deduplicate_target_table: %.1fs.", job.target_table, time.perf_counter() - t0)
+
+                    t0 = time.perf_counter()
+                    ensure_unique_constraint(conn, job)
+                    logger.info("%s | ensure_unique_constraint: %.1fs.", job.target_table, time.perf_counter() - t0)
+
+                    t0 = time.perf_counter()
+                    create_dedup_staging(conn, job, columns)
+                    logger.info("%s | create_dedup_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
+
+                    t0 = time.perf_counter()
+                    upsert_from_staging(conn, job, columns)
+                    logger.info("%s | upsert_from_staging: %.1fs.", job.target_table, time.perf_counter() - t0)
 
             t0 = time.perf_counter()
             drop_staging_tables(conn, job)
@@ -728,6 +767,7 @@ def run_job(
     oracle_schema: str,
     job: EtlJob,
     lookback_days: int | None,
+    is_delete_mode: bool = False,
 ) -> None:
     started_at = time.perf_counter()
     logger.info(
@@ -789,7 +829,7 @@ def run_job(
         _copy_dataframe_to_staging(dsn, job, merged, staging_mode)
         staged_records += len(merged)
 
-    finalize_load(engine, job, columns)
+    finalize_load(engine, job, columns, is_delete_mode)
 
     elapsed = time.perf_counter() - started_at
     records_per_sec = extracted_records / elapsed if elapsed > 0 else 0
@@ -982,6 +1022,11 @@ def parse_args() -> argparse.Namespace:
             "sem conectar ou gravar no PostgreSQL."
         ),
     )
+    parser.add_argument(
+        "--delete-mode",
+        action="store_true",
+        help="Executa em modo de exclusao (apaga no Supabase as chaves extraidas do Oracle).",
+    )
     return parser.parse_args()
 
 
@@ -991,6 +1036,7 @@ def _run_job_with_retry(
     lookback_days: int | None,
     job_index: int,
     total_jobs: int,
+    is_delete_mode: bool = False,
 ) -> str | None:
     """Executa um job com retry (ate JOB_MAX_ATTEMPTS tentativas).
 
@@ -1014,7 +1060,7 @@ def _run_job_with_retry(
                 pool_pre_ping=True,
             )
             ora_conn = create_oracle_connection()
-            run_job(engine, ora_conn, oracle_schema, job, lookback_days)
+            run_job(engine, ora_conn, oracle_schema, job, lookback_days, is_delete_mode)
             logger.info(
                 "Job %s/%s | oracle_table=%s | target=%s concluido com sucesso"
                 " na tentativa %s/%s.",
@@ -1117,7 +1163,7 @@ def main() -> None:
             )
 
             error_msg = _run_job_with_retry(
-                job, oracle_schema, lookback_days, job_index, len(jobs)
+                job, oracle_schema, lookback_days, job_index, len(jobs), args.delete_mode
             )
 
             if error_msg is None:

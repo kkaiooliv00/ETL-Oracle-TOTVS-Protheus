@@ -1,0 +1,47 @@
+name: ETL Oracle Cleanup (Garbage Collection)
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 00:00 AM BRT (UTC-3)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: etl-oracle-cleanup
+  cancel-in-progress: false
+
+jobs:
+  run-etl-cleanup:
+    name: ETL Oracle Cleanup
+    runs-on: self-hosted
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python com cache de dependencias
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.9"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Executar ETL Cleanup
+        shell: powershell
+        env:
+          ETL_JOBS_FILE: oracle_jobs_cleanup.yml
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ORA_HOST: ${{ secrets.ORA_HOST }}
+          ORA_PORT: ${{ secrets.ORA_PORT }}
+          ORA_SERVICE: ${{ secrets.ORA_SERVICE }}
+          ORA_USER: ${{ secrets.ORA_USER }}
+          ORA_PASSWORD: ${{ secrets.ORA_PASSWORD }}
+        run: |
+          Write-Output "Iniciando Limpeza de Registros Deletados (Garbage Collection)"
+          python oracle_etl.py --delete-mode
