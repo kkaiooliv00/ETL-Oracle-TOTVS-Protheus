@@ -364,3 +364,14 @@ jobs:
     date_column: CND_DTINIC
     query: >
       SELECT TRIM(c.CND_FILIAL) || '|' || TRIM(c.CND_CONTRA) || '|' || TRIM(c.CND_NUMMED) AS SUPER_CHAVE, c.CND_FILIAL, c.CND_CONTRA, c.CND_NUMMED, c.CND_COMPET, c.CND_DTINIC FROM {schema}.CND010 c
+
+  - oracle_table: SA1010
+    target_table: SA1
+    query: >
+      SELECT
+          a1_nome,
+          A1_CGC,
+          a1_cod,
+          a1_loja
+      FROM {schema}.SA1010
+
