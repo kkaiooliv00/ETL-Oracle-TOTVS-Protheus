@@ -7,7 +7,7 @@ jobs:
       SELECT
           A1.A1_CGC,
           a1.A1_COD,
-          a1.A1_NOME,
+          e1.E1_VENCTO,
           SUM(E1.E1_SALDO) AS INADIMPLENCIA
       FROM {schema}.SE1010 E1
       JOIN {schema}.SA1010 A1 ON A1.A1_COD = E1.E1_CLIENTE AND E1.E1_LOJA = A1.A1_LOJA
@@ -17,7 +17,7 @@ jobs:
         AND TRUNC(CURRENT_DATE) > TO_DATE(E1.E1_VENCTO, 'YYYYMMDD')
       GROUP BY A1.A1_CGC,
                a1.A1_COD,
-               a1.A1_NOME
+               e1.E1_VENCTO
 
   - oracle_table: SE1010
     target_table: LMC
@@ -37,20 +37,3 @@ jobs:
                a1.A1_COD,
                a1.A1_NOME
 
-  - oracle_table: SE1010
-    target_table: INAD2
-    query: >
-      SELECT
-          A1.A1_CGC,
-          a1.A1_COD,
-          a1.A1_NOME,
-          SUM(E1.E1_SALDO) AS INADIMPLENCIA
-      FROM {schema}.SE1010 E1
-      JOIN {schema}.SA1010 A1 ON A1.A1_COD = E1.E1_CLIENTE AND E1.E1_LOJA = A1.A1_LOJA
-      WHERE E1.D_E_L_E_T_ = ' '
-        AND E1.E1_BAIXA = ' '
-        AND (E1.E1_NUMBOR <> ' ' OR E1.E1_XFATGW <> ' ')
-        AND TRUNC(CURRENT_DATE) > TO_DATE(E1.E1_VENCTO, 'YYYYMMDD')
-      GROUP BY A1.A1_CGC,
-               a1.A1_COD,
-               a1.A1_NOME
