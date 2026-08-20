@@ -7,6 +7,7 @@ jobs:
       SELECT
           A1.A1_CGC,
           a1.A1_COD,
+          a1.A1_NOME,
           e1.E1_VENCTO,
           SUM(E1.E1_SALDO) AS INADIMPLENCIA
       FROM {schema}.SE1010 E1
@@ -17,6 +18,7 @@ jobs:
         AND TRUNC(CURRENT_DATE) > TO_DATE(E1.E1_VENCTO, 'YYYYMMDD')
       GROUP BY A1.A1_CGC,
                a1.A1_COD,
+               a1.A1_NOME,
                e1.E1_VENCTO
 
   - oracle_table: SE1010
