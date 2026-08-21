@@ -1,9 +1,10 @@
 name: ETL Oracle Finance
 
 on:
-  schedule:
-    - cron: '30 8 * * *' # 5:30 AM BRT (UTC-3)
-    - cron: '0 15 * * *' # 12:00 PM BRT (UTC-3)
+  workflow_run:
+    workflows: ["ETL Oracle TOTVS Protheus"]
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       mode:
@@ -61,6 +62,7 @@ jobs:
     name: ETL Oracle Finance
     runs-on: self-hosted
     timeout-minutes: 300
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout

@@ -2,13 +2,10 @@ name: ETL Oracle TOTVS Protheus
 
 on:
   schedule:
-    - cron: '30 4 * * *' # 1:30 AM no fuso (UTC-3)
+    - cron: '0 3 * * *' # 00:00 AM no fuso (UTC-3)
   workflow_dispatch:
     inputs:
       mode:
-        description: >
-          Modo de execucao:
-          all = todas as tabelas
           custom = apenas as tabelas informadas em 'tables'
           exclude = todas exceto as informadas em 'exclude_tables'
         required: true
