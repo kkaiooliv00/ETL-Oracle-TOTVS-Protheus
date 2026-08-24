@@ -31,7 +31,20 @@ GW_SOURCE_USER_ENV = "GW_SOURCE_USER"
 GW_SOURCE_PASSWORD_ENV = "GW_SOURCE_PASSWORD"
 GW_SOURCE_SSLMODE_ENV = "GW_SOURCE_SSLMODE"
 JOBS_FILE = Path(os.getenv("POSTGRES_JOBS_FILE", Path(__file__).parent / "postgres_jobs.yml"))
-FETCH_SIZE = 10_000
+
+
+def positive_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} deve ser um numero inteiro positivo.") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} deve ser maior que zero.")
+    return value
+
+
+FETCH_SIZE = positive_int_env("POSTGRES_FETCH_SIZE", 20_000)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("postgres_to_supabase")

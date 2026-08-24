@@ -18,7 +18,7 @@ jobs:
   run-etl-cleanup:
     name: ETL Oracle Cleanup
     runs-on: self-hosted
-    timeout-minutes: 120
+    timeout-minutes: 300
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:

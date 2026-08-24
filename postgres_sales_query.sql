@@ -1,8 +1,7 @@
 WITH vendas_filtradas AS (
     SELECT sl.*
     FROM sales sl
-    WHERE sl.emissao_em >= DATE '2026-05-01'
-      AND NOT sl.is_cancelado
+    WHERE NOT sl.is_cancelado
       AND sl.ctrc_anulacao_id IS NULL
 ),
 _soma_iss AS (

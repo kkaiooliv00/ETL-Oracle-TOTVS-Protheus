@@ -5,6 +5,9 @@ jobs:
     target_table: INAD
     query: >
       SELECT
+          COALESCE(TRIM(A1.A1_CGC), ' ') || '|' ||
+          COALESCE(TRIM(A1.A1_COD), ' ') || '|' ||
+          COALESCE(TRIM(E1.E1_VENCTO), ' ') AS SUPER_CHAVE,
           A1.A1_CGC,
           a1.A1_COD,
           a1.A1_NOME,
@@ -25,6 +28,8 @@ jobs:
     target_table: LMC
     query: >
       SELECT
+          COALESCE(TRIM(A1.A1_CGC), ' ') || '|' ||
+          COALESCE(TRIM(A1.A1_COD), ' ') AS SUPER_CHAVE,
           A1.A1_CGC,
           a1.A1_COD,
           a1.A1_NOME,
@@ -38,4 +43,3 @@ jobs:
       GROUP BY A1.A1_CGC,
                a1.A1_COD,
                a1.A1_NOME
-

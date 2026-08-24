@@ -1,17 +1,8 @@
+# Reconciliacao completa das tabelas Oracle carregadas no Supabase.
+# Novos jobs adicionados aos arquivos abaixo entram automaticamente no cleanup.
 oracle_schema: U_CJ4AP2_PR
+cleanup_strategy: reconcile
 
-jobs:
-  - oracle_table: SC1010
-    target_table: SC1
-    query: >
-      SELECT COALESCE(TRIM(SC1.C1_FILIAL),' ') || '|' || COALESCE(TRIM(SC1.C1_NUM),' ') || '|' || COALESCE(TRIM(SC1.C1_ITEM),' ') || '|' || COALESCE(TRIM(SC1.C1_PRODUTO),' ') || '|' || COALESCE(TO_CHAR(SC1.R_E_C_N_O_),' ') AS SUPER_CHAVE FROM {schema}.SC1010 SC1 WHERE SC1.D_E_L_E_T_ = '*'
-
-  - oracle_table: SC7010
-    target_table: SC7
-    query: >
-      SELECT COALESCE(TRIM(SC7.C7_FILIAL),' ') || '|' || COALESCE(TRIM(SC7.C7_NUM),' ') || '|' || COALESCE(TRIM(SC7.C7_ITEM),' ') || '|' || COALESCE(TRIM(SC7.C7_FORNECE),' ') || '|' || COALESCE(TO_CHAR(SC7.R_E_C_N_O_),' ') AS SUPER_CHAVE FROM {schema}.SC7010 SC7 WHERE SC7.D_E_L_E_T_ = '*'
-
-  - oracle_table: SC8010
-    target_table: SC8
-    query: >
-      SELECT COALESCE(TRIM(C8_FILIAL),' ') || '|' || COALESCE(TRIM(C8_NUM),' ') || '|' || COALESCE(TRIM(C8_ITEM),' ') || '|' || COALESCE(TRIM(C8_NUMSC),' ') || '|' || COALESCE(TRIM(C8_ITEMSC),' ') || '|' || COALESCE(TRIM(C8_FORNECE),' ') || '|' || COALESCE(TO_CHAR(R_E_C_N_O_),' ') AS SUPER_CHAVE FROM {schema}.SC8010 WHERE D_E_L_E_T_ = '*'
+include_job_files:
+  - oracle_jobs.yml
+  - oracle_jobs_finance.yml

@@ -38,11 +38,22 @@ DATABASE_URL_ENV = "DATABASE_URL"
 # ── Config ────────────────────────────────────────────────────────────────────
 JOB_CONFIG_PATH = Path(os.getenv("ETL_JOBS_FILE", Path(__file__).parent / "oracle_jobs.yml"))
 
-# Registros por batch do cursor Oracle.
-FETCH_SIZE = 10_000
+def positive_int_env(name: str, default: int) -> int:
+    """Le um inteiro positivo do ambiente com mensagem de erro clara."""
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} deve ser um numero inteiro positivo.") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} deve ser maior que zero.")
+    return value
 
-# Registros acumulados antes de despejar no staging via COPY.
-STAGING_FLUSH_RECORDS = 10_000
+
+# Lotes maiores reduzem viagens de rede em extracoes volumosas. Ambos podem ser
+# ajustados no runner sem alterar codigo caso uma tabela larga exija menos memoria.
+FETCH_SIZE = positive_int_env("ORACLE_FETCH_SIZE", 20_000)
+STAGING_FLUSH_RECORDS = positive_int_env("STAGING_FLUSH_RECORDS", 20_000)
 
 BUSINESS_TIMEZONE = ZoneInfo("America/Fortaleza")
 TARGET_SCHEMA = "tables"
@@ -75,6 +86,7 @@ class EtlJob:
     date_column: str | None = None
     business_key: str = BUSINESS_KEY
     business_key_columns: tuple[str, ...] = ()
+    cleanup_strategy: str = "deleted_keys"
 
     @property
     def staging_table(self) -> str:
@@ -136,26 +148,55 @@ def qualified_table(schema: str, table: str) -> str:
 
 # ── Carregamento de jobs ──────────────────────────────────────────────────────
 
-def load_jobs() -> tuple[str, list[EtlJob]]:
-    """Carrega a configuracao de jobs do YAML.
+def _load_job_config(
+    config_path: Path,
+    inherited_cleanup_strategy: str | None = None,
+    loading: tuple[Path, ...] = (),
+) -> tuple[str, list[EtlJob]]:
+    """Carrega um YAML e expande arquivos incluidos de forma recursiva."""
+    config_path = config_path.resolve()
+    if config_path in loading:
+        chain = " -> ".join(str(path) for path in (*loading, config_path))
+        raise RuntimeError(f"Inclusao circular de arquivos de jobs: {chain}")
+    if not config_path.exists():
+        raise RuntimeError(f"Arquivo de jobs nao encontrado: {config_path}")
 
-    Retorna uma tupla (oracle_schema, lista_de_jobs).
-    """
-    if not JOB_CONFIG_PATH.exists():
-        raise RuntimeError(f"Arquivo de jobs nao encontrado: {JOB_CONFIG_PATH}")
-
-    with JOB_CONFIG_PATH.open(encoding="utf-8") as f:
+    with config_path.open(encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
 
     oracle_schema = str(config.get("oracle_schema", "")).strip()
-    if not oracle_schema:
-        raise RuntimeError("oracle_jobs.yml deve conter oracle_schema.")
-
-    raw_jobs = config.get("jobs")
-    if not isinstance(raw_jobs, list) or not raw_jobs:
-        raise RuntimeError("oracle_jobs.yml deve conter uma lista nao vazia em jobs.")
+    cleanup_strategy = str(
+        config.get("cleanup_strategy", inherited_cleanup_strategy or "deleted_keys")
+    ).strip().lower()
+    if cleanup_strategy not in {"deleted_keys", "reconcile"}:
+        raise RuntimeError(
+            f"cleanup_strategy invalida em {config_path}: {cleanup_strategy}. "
+            "Use 'deleted_keys' ou 'reconcile'."
+        )
 
     jobs: list[EtlJob] = []
+    include_files = config.get("include_job_files") or []
+    if not isinstance(include_files, list):
+        raise RuntimeError(f"include_job_files deve ser uma lista em {config_path}.")
+    for include_file in include_files:
+        included_path = config_path.parent / str(include_file)
+        included_schema, included_jobs = _load_job_config(
+            included_path,
+            inherited_cleanup_strategy=cleanup_strategy,
+            loading=(*loading, config_path),
+        )
+        if oracle_schema and included_schema != oracle_schema:
+            raise RuntimeError(
+                f"Schemas Oracle divergentes: {config_path} usa {oracle_schema}, "
+                f"mas {included_path} usa {included_schema}."
+            )
+        oracle_schema = oracle_schema or included_schema
+        jobs.extend(included_jobs)
+
+    raw_jobs = config.get("jobs") or []
+    if not isinstance(raw_jobs, list):
+        raise RuntimeError(f"jobs deve ser uma lista em {config_path}.")
+
     for raw in raw_jobs:
         if not isinstance(raw, dict):
             raise RuntimeError("Cada job deve conter oracle_table e target_table.")
@@ -166,8 +207,11 @@ def load_jobs() -> tuple[str, list[EtlJob]]:
             date_column = raw.get("date_column")
             business_key = str(raw.get("business_key", BUSINESS_KEY)).strip()
             raw_bk_cols = raw.get("business_key_columns") or []
+            job_cleanup_strategy = str(
+                raw.get("cleanup_strategy", cleanup_strategy)
+            ).strip().lower()
         except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError(f"Job invalido em {JOB_CONFIG_PATH}: {raw!r}") from exc
+            raise RuntimeError(f"Job invalido em {config_path}: {raw!r}") from exc
 
         if not oracle_table:
             raise RuntimeError("oracle_table nao pode ser vazio.")
@@ -175,6 +219,10 @@ def load_jobs() -> tuple[str, list[EtlJob]]:
             raise RuntimeError("target_table nao pode ser vazio.")
         if not business_key:
             raise RuntimeError(f"business_key vazio em {target_table}.")
+        if job_cleanup_strategy not in {"deleted_keys", "reconcile"}:
+            raise RuntimeError(
+                f"cleanup_strategy invalida em {target_table}: {job_cleanup_strategy}."
+            )
         if query is None or not str(query).strip():
             raise RuntimeError(
                 f"Job '{target_table}' nao possui campo 'query' no YAML. "
@@ -194,8 +242,21 @@ def load_jobs() -> tuple[str, list[EtlJob]]:
             date_column=date_column,
             business_key=business_key,
             business_key_columns=business_key_columns,
+            cleanup_strategy=job_cleanup_strategy,
         ))
+
+    if not oracle_schema:
+        raise RuntimeError(f"{config_path} deve conter oracle_schema.")
+    if not jobs:
+        raise RuntimeError(
+            f"{config_path} deve conter jobs ou include_job_files nao vazio."
+        )
     return oracle_schema, jobs
+
+
+def load_jobs() -> tuple[str, list[EtlJob]]:
+    """Carrega a configuracao principal e todos os arquivos incluidos."""
+    return _load_job_config(JOB_CONFIG_PATH)
 
 
 # ── Conexao Oracle ────────────────────────────────────────────────────────────
@@ -242,6 +303,7 @@ def _build_query(
     oracle_schema: str,
     job: EtlJob,
     lookback_days: int | None,
+    is_delete_mode: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Prepara a query customizada para execucao.
 
@@ -258,7 +320,17 @@ def _build_query(
             f"SELECT * nao e permitido. Defina o campo 'query' no YAML."
         )
 
-    sql = job.query.replace("{schema}", oracle_schema)
+    sql = job.query.replace("{schema}", oracle_schema).rstrip().rstrip(";")
+    if is_delete_mode and job.cleanup_strategy == "reconcile":
+        if not job.business_key.replace("_", "").isalnum():
+            raise RuntimeError(
+                f"business_key invalida para consulta Oracle: {job.business_key}"
+            )
+        key = job.business_key
+        sql = (
+            f"SELECT cleanup_source.{key} FROM ({sql}) cleanup_source "
+            f"WHERE cleanup_source.{key} IS NOT NULL"
+        )
     logger.info("%s | Query: %s", job.target_table, sql)
     return sql, params
 
@@ -268,6 +340,7 @@ def iter_oracle_batches(
     oracle_schema: str,
     job: EtlJob,
     lookback_days: int | None,
+    is_delete_mode: bool = False,
 ) -> Iterator[tuple[int, list[dict[str, Any]]]]:
     """Extrai registros do Oracle em batches via cursor.fetchmany().
 
@@ -275,7 +348,9 @@ def iter_oracle_batches(
     do iter_api_pages() do ETL antigo para manter compatibilidade com
     o run_job().
     """
-    sql, params = _build_query(oracle_schema, job, lookback_days)
+    sql, params = _build_query(
+        oracle_schema, job, lookback_days, is_delete_mode=is_delete_mode
+    )
     total_extracted = 0
 
     with ora_conn.cursor() as cursor:
@@ -665,6 +740,33 @@ def _staging_has_business_key(connection: Connection, job: EtlJob) -> bool:
     return job.business_key in staging_columns
 
 
+def create_empty_key_staging(connection: Connection, job: EtlJob) -> None:
+    """Cria staging vazio para uma reconciliacao cuja origem nao tem linhas."""
+    staging = qualified_table(TARGET_SCHEMA, job.staging_table)
+    target = qualified_table(TARGET_SCHEMA, job.target_table)
+    key = quote_identifier(job.business_key)
+    connection.execute(text(f"DROP TABLE IF EXISTS {staging}"))
+    table_exists = connection.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class t
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE t.relname = :tn AND n.nspname = :sn
+            )
+            """
+        ),
+        {"tn": job.target_table, "sn": TARGET_SCHEMA},
+    ).scalar_one()
+    if table_exists:
+        connection.execute(
+            text(f"CREATE TABLE {staging} AS SELECT {key} FROM {target} WHERE FALSE")
+        )
+    else:
+        connection.execute(text(f"CREATE TABLE {staging} ({key} TEXT)"))
+
+
 def delete_from_staging(connection: Connection, job: EtlJob) -> None:
     key = quote_identifier(job.business_key)
     staging = qualified_table(TARGET_SCHEMA, job.staging_table)
@@ -688,14 +790,24 @@ def delete_from_staging(connection: Connection, job: EtlJob) -> None:
         logger.info("%s | Tabela alvo nao existe no destino. Nada a excluir.", job.target_table)
         return
         
-    result = connection.execute(
-        text(
-            f"DELETE FROM {target} WHERE {key} IN (SELECT {key} FROM {staging})"
+    if job.cleanup_strategy == "reconcile":
+        result = connection.execute(
+            text(
+                f"DELETE FROM {target} AS target "
+                f"WHERE NOT EXISTS ("
+                f"SELECT 1 FROM {staging} AS source "
+                f"WHERE source.{key} = target.{key})"
+            )
         )
-    )
+    else:
+        result = connection.execute(
+            text(
+                f"DELETE FROM {target} WHERE {key} IN (SELECT {key} FROM {staging})"
+            )
+        )
     logger.info(
-        "%s | DELETE concluido: %s linhas excluidas fisicamente do Supabase.",
-        job.target_table, result.rowcount,
+        "%s | Cleanup (%s) concluido: %s linhas excluidas fisicamente do Supabase.",
+        job.target_table, job.cleanup_strategy, result.rowcount,
     )
 
 
@@ -787,7 +899,13 @@ def run_job(
         drop_staging_tables(conn, job)
 
     try:
-        for batch_num, records in iter_oracle_batches(ora_conn, oracle_schema, job, lookback_days):
+        for batch_num, records in iter_oracle_batches(
+            ora_conn,
+            oracle_schema,
+            job,
+            lookback_days,
+            is_delete_mode=is_delete_mode,
+        ):
             extracted_records += len(records)
             if not records:
                 continue
@@ -817,10 +935,19 @@ def run_job(
         raise
 
     if columns is None:
-        logger.info(
-            "%s | Nenhum registro retornado; carga dispensada.", job.target_table
-        )
-        return
+        if is_delete_mode and job.cleanup_strategy == "reconcile":
+            logger.info(
+                "%s | Origem sem registros ativos; reconciliacao esvaziara o destino.",
+                job.target_table,
+            )
+            with engine.begin() as conn:
+                create_empty_key_staging(conn, job)
+            columns = [job.business_key]
+        else:
+            logger.info(
+                "%s | Nenhum registro retornado; carga dispensada.", job.target_table
+            )
+            return
 
     # Flush do buffer residual
     if buffer_frames:
