@@ -25,12 +25,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python com cache de dependencias
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12.9"
-          cache: pip
-          cache-dependency-path: requirements.txt
+      - name: Verificar Python instalado
+        run: |
+          python --version
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            Write-Error "Python não encontrado na máquina"
+            exit 1
+          }
+        shell: pwsh
 
       - name: Instalar dependencias
         run: python -m pip install --disable-pip-version-check -r requirements.txt
