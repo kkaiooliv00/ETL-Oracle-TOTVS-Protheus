@@ -1,0 +1,25 @@
+name: Instalar Dependências
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install-deps:
+    name: Instalar Dependências Python
+    runs-on: self-hosted
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Verificar Python instalado
+        run: |
+          python --version
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            Write-Error "Python não encontrado na máquina"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Instalar dependências
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+        shell: pwsh
