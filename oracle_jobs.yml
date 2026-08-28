@@ -161,6 +161,8 @@ jobs:
           SE2.E2_IRRF,
           SE2.E2_EMIS1,
           SE2.E2_SALDO,
+          SE2.E2_XPAGO,
+          SE2.E2_XBLOQ,
           SE2.E2_VALLIQ,
           SE2.E2_RATEIO,
           SE2.E2_ORIGEM,
@@ -374,4 +376,19 @@ jobs:
           R_E_C_N_O_
       FROM {schema}.SA1010
       WHERE D_E_L_E_T_ = ' '
+
+  - oracle_table: FLF010
+    target_table: FLF
+    query: >
+      SELECT
+          COALESCE(TRIM(FLF.FLF_FILIAL), ' ') || '|' ||
+          COALESCE(TRIM(FLF.FLF_TIPO), ' ') || '|' ||
+          COALESCE(TO_CHAR(FLF.R_E_C_N_O_), ' ') AS SUPER_CHAVE,
+          FLF.FLF_FILIAL,
+          FLF.FLF_TIPO,
+          FLF.FLF_MOTIVO,
+          FLF.R_E_C_N_O_,
+          FLF.D_E_L_E_T_
+      FROM {schema}.FLF010 FLF
+      WHERE FLF.D_E_L_E_T_ = ' '
 
