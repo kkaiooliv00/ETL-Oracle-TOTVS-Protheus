@@ -386,7 +386,9 @@ jobs:
           COALESCE(TO_CHAR(FLF.R_E_C_N_O_), ' ') AS SUPER_CHAVE,
           FLF.FLF_FILIAL,
           FLF.FLF_TIPO,
-          FLF.FLF_MOTIVO,
+          UTL_RAW.CAST_TO_VARCHAR2(
+              DBMS_LOB.SUBSTR(FLF.FLF_MOTIVO, 4000, 1)
+          ) AS FLF_MOTIVO,
           FLF.R_E_C_N_O_,
           FLF.D_E_L_E_T_
       FROM {schema}.FLF010 FLF
