@@ -9,12 +9,15 @@ jobs:
           COALESCE(TRIM(A1.A1_COD), ' ') || '|' ||
           COALESCE(TRIM(E1.E1_VENCTO), ' ') AS SUPER_CHAVE,
           A1.A1_CGC,
+          a1.A1_GRPVEN,
+          e1.E1_ZGRPVEN,
           a1.A1_COD,
           a1.A1_NOME,
           e1.E1_VENCTO,
           SUM(E1.E1_SALDO) AS INADIMPLENCIA
       FROM {schema}.SE1010 E1
       JOIN {schema}.SA1010 A1 ON A1.A1_COD = E1.E1_CLIENTE AND E1.E1_LOJA = A1.A1_LOJA
+      LEFT JOIN {schema}.ACY010 ACY ON ACY.ACY_GRPVEN = E1.E1_ZGRPVEN
       WHERE E1.D_E_L_E_T_ = ' '
         AND E1.E1_BAIXA = ' '
         AND (E1.E1_NUMBOR <> ' ' OR E1.E1_XFATGW <> ' ')
@@ -22,7 +25,9 @@ jobs:
       GROUP BY A1.A1_CGC,
                a1.A1_COD,
                a1.A1_NOME,
-               e1.E1_VENCTO
+               e1.E1_VENCTO,
+               a1.A1_GRPVEN,
+               e1.E1_ZGRPVEN
 
   - oracle_table: SE1010
     target_table: LMC
@@ -31,6 +36,8 @@ jobs:
           COALESCE(TRIM(A1.A1_CGC), ' ') || '|' ||
           COALESCE(TRIM(A1.A1_COD), ' ') AS SUPER_CHAVE,
           A1.A1_CGC,
+          a1.A1_GRPVEN,
+          e1.E1_ZGRPVEN,
           a1.A1_COD,
           a1.A1_NOME,
           MAX(A1.A1_NREDUZ) AS A1_NREDUZ,
@@ -42,4 +49,6 @@ jobs:
         AND E1.D_E_L_E_T_ = ' '
       GROUP BY A1.A1_CGC,
                a1.A1_COD,
-               a1.A1_NOME
+               a1.A1_NOME,
+               a1.A1_GRPVEN,
+               e1.E1_ZGRPVEN
