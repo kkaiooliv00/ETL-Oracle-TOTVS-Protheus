@@ -48,6 +48,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: etl-oracle-totvs
@@ -171,3 +172,30 @@ jobs:
           path: artifacts/oracle_export.xlsx
           if-no-files-found: error
           retention-days: 7
+
+      - name: Disparar ETL Finance
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $MODE = "${{ inputs.mode }}"
+          if ([string]::IsNullOrWhiteSpace($MODE)) { $MODE = "all" }
+          $DESTINATION = "${{ inputs.destination }}"
+          if ([string]::IsNullOrWhiteSpace($DESTINATION)) { $DESTINATION = "supabase" }
+          $LOOKBACK = "${{ inputs.lookback_days }}"
+          if ([string]::IsNullOrWhiteSpace($LOOKBACK)) { $LOOKBACK = "30" }
+          
+          $Args = @()
+          $Args += "-f", "mode=$MODE"
+          $Args += "-f", "destination=$DESTINATION"
+          $Args += "-f", "lookback_days=$LOOKBACK"
+          
+          $TABLES = "${{ inputs.tables }}"
+          if (-not [string]::IsNullOrWhiteSpace($TABLES)) { $Args += "-f", "tables=$TABLES" }
+          
+          $EXCLUDE = "${{ inputs.exclude_tables }}"
+          if (-not [string]::IsNullOrWhiteSpace($EXCLUDE)) { $Args += "-f", "exclude_tables=$EXCLUDE" }
+          
+          Write-Output "Disparando ETL Finance: gh workflow run `"ETL Oracle Finance`" $Args"
+          gh workflow run "ETL Oracle Finance" @Args
+        shell: pwsh

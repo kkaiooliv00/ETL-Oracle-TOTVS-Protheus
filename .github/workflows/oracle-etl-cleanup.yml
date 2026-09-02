@@ -1,10 +1,6 @@
 name: ETL Oracle Cleanup (Garbage Collection)
 
 on:
-  workflow_run:
-    workflows: ["ETL Oracle Finance"]
-    types:
-      - completed
   workflow_dispatch:
 
 permissions:
@@ -19,7 +15,6 @@ jobs:
     name: ETL Oracle Cleanup
     runs-on: self-hosted
     timeout-minutes: 300
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout

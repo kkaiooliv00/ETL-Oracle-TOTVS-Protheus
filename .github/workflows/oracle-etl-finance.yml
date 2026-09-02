@@ -1,10 +1,6 @@
 name: ETL Oracle Finance
 
 on:
-  workflow_run:
-    workflows: ["ETL Oracle TOTVS Protheus"]
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       mode:
@@ -52,6 +48,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: etl-oracle-finance
@@ -62,7 +59,6 @@ jobs:
     name: ETL Oracle Finance
     runs-on: self-hosted
     timeout-minutes: 300
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout
@@ -177,3 +173,19 @@ jobs:
           path: artifacts/oracle_export.xlsx
           if-no-files-found: error
           retention-days: 7
+
+      - name: Disparar ETL Cleanup
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $MODE = "${{ inputs.mode }}"
+          if ([string]::IsNullOrWhiteSpace($MODE)) { $MODE = "all" }
+          
+          if ($MODE -eq "all") {
+            Write-Output "Modo é 'all', disparando ETL Cleanup..."
+            gh workflow run "ETL Oracle Cleanup (Garbage Collection)"
+          } else {
+            Write-Output "Modo atual ($MODE) não é 'all'. Cleanup automático não será disparado."
+          }
+        shell: pwsh
