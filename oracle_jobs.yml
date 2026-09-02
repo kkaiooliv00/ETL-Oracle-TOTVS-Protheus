@@ -68,7 +68,7 @@ jobs:
   - oracle_table: SCR010
     target_table: SCR
     query: >
-      SELECT COALESCE(TRIM(CR_FILIAL),' ') || '|' || COALESCE(TRIM(CR_NUM),' ') || '|' || COALESCE(TRIM(CR_TIPO),' ') || '|' || COALESCE(TO_CHAR(R_E_C_N_O_),' ') AS SUPER_CHAVE,CR_FILIAL,CR_STATUS,CR_NUM,CR_APROV,CR_TIPO,CR_DATALIB,CASE WHEN CR_STATUS = '01' THEN 'Aguardando nivel anterior' WHEN CR_STATUS = '02' THEN 'Pendente' WHEN CR_STATUS = '03' THEN 'Liberado' WHEN CR_STATUS = '04' THEN 'Bloqueado' WHEN CR_STATUS = '05' THEN 'Liberado outro aprov.' WHEN CR_STATUS = '06' THEN 'Rejeitado' WHEN CR_STATUS = '07' THEN 'Rej/Bloq outro aprov.' ELSE 'Status Desconhecido' END AS CR_STATUS_LEGENDA,R_E_C_N_O_,D_E_L_E_T_ FROM {schema}.SCR010 WHERE D_E_L_E_T_ = ' '
+      SELECT COALESCE(TRIM(CR_FILIAL),' ') || '|' || COALESCE(TRIM(CR_NUM),' ') || '|' || COALESCE(TRIM(CR_TIPO),' ') || '|' || COALESCE(TO_CHAR(R_E_C_N_O_),' ') AS SUPER_CHAVE,CR_FILIAL,CR_STATUS,CR_NUM,CR_APROV,CR_TIPO,CR_USER,CR_GRUPO,CR_NIVEL,CR_DATALIB,CR_USERLIB,CASE WHEN CR_STATUS = '01' THEN 'Aguardando nivel anterior' WHEN CR_STATUS = '02' THEN 'Pendente' WHEN CR_STATUS = '03' THEN 'Liberado' WHEN CR_STATUS = '04' THEN 'Bloqueado' WHEN CR_STATUS = '05' THEN 'Liberado outro aprov.' WHEN CR_STATUS = '06' THEN 'Rejeitado' WHEN CR_STATUS = '07' THEN 'Rej/Bloq outro aprov.' ELSE 'Status Desconhecido' END AS CR_STATUS_LEGENDA,R_E_C_N_O_,D_E_L_E_T_ FROM {schema}.SCR010 WHERE D_E_L_E_T_ = ' '
 
   - oracle_table: DBM010
     target_table: DBM
